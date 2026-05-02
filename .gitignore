@@ -1,0 +1,7 @@
+node_modules/
+.browser-profile/
+.env
+data/debug/
+data/observed-questions.json
+npm-debug.log*
+Новый текстовый документ.txt

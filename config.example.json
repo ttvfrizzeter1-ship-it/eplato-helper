@@ -1,0 +1,18 @@
+{
+  "startUrl": "https://ez.pdmu.edu.ua/eAristoStudent/subjects",
+  "profileDir": ".browser-profile",
+  "headless": false,
+  "mode": "manual",
+  "autoSubmit": false,
+  "presentationMaxSlides": 250,
+  "ai": {
+    "provider": "openai",
+    "openaiModel": "gpt-5-mini",
+    "geminiModel": "gemini-2.5-flash"
+  },
+  "slowMoMs": 0,
+  "timeouts": {
+    "pageMs": 30000,
+    "afterClickMs": 350
+  }
+}
