@@ -41,12 +41,14 @@ In `config.json`:
   "mode": "manual",
   "autoSubmit": false,
   "ai": {
-    "provider": "gemini",
+    "provider": "ollama",
     "openaiApi": "responses",
     "openaiModel": "gpt-5-mini",
     "geminiModel": "gemini-2.5-flash",
+    "ollamaBaseUrl": "http://127.0.0.1:11434",
+    "ollamaModel": "qwen2.5:3b",
     "retries": 2,
-    "timeoutMs": 45000
+    "timeoutMs": 90000
   }
 }
 ```
@@ -55,8 +57,9 @@ In `config.json`:
 - `answer-bank` tries to select an answer if it exists in `answers.json`.
 - `autoSubmit: false` leaves submit/next clicks manual.
 - `autoSubmit: true` clicks submit/next after a matched answer.
-- `ai.provider` can be `gemini` or `openai`.
+- `ai.provider` can be `ollama`, `gemini`, or `openai`.
 - `ai.openaiApi` can be `responses` or `chat`.
+- `ai.ollamaModel` is the local Ollama model name.
 - `ai.retries` retries transient AI/API failures.
 - `ai.timeoutMs` limits one AI request.
 - `presentationMaxSlides` limits how many times guided mode can click `Next`.
@@ -69,6 +72,46 @@ In `config.json`:
 - If navigation fails on a specific page, use menu action `6` and send the files from `data/debug`.
 
 ## AI suggestion
+
+### Ollama local
+
+Ollama is the default local provider in `config.json`.
+
+This repo is configured for a portable Ollama binary in `.tools/ollama`.
+If it is missing, download Ollama from:
+
+```text
+https://ollama.com/download/windows
+```
+
+Or use the standalone GitHub release zip:
+
+```text
+https://github.com/ollama/ollama/releases
+```
+
+Start the local Ollama server:
+
+```powershell
+npm.cmd run ollama:serve
+```
+
+Open another terminal in the project folder, then pull/check the model:
+
+```powershell
+npm.cmd run ollama:pull
+npm.cmd run ollama:list
+```
+
+Run the helper:
+
+```powershell
+npm.cmd start
+```
+
+No cloud API key is needed for Ollama.
+
+### Cloud providers
 
 Set one API key before running:
 

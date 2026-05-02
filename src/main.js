@@ -47,6 +47,8 @@ const DEFAULT_CONFIG = {
     openaiApi: 'responses',
     openaiModel: 'gpt-5-mini',
     geminiModel: 'gemini-2.5-flash',
+    ollamaBaseUrl: 'http://127.0.0.1:11434',
+    ollamaModel: 'qwen2.5:3b',
     retries: 2,
     timeoutMs: 45000
   },
@@ -241,12 +243,42 @@ async function askGemini(config, prompt) {
   return extractJsonObject(text);
 }
 
+async function askOllama(config, prompt) {
+  const baseUrl = (config.ai.ollamaBaseUrl || 'http://127.0.0.1:11434').replace(/\/$/, '');
+  const data = await fetchJsonWithTimeout(
+    `${baseUrl}/api/chat`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: config.ai.ollamaModel || 'qwen2.5:3b',
+        stream: false,
+        options: {
+          temperature: 0
+        },
+        messages: [
+          {
+            role: 'user',
+            content: prompt
+          }
+        ]
+      })
+    },
+    config.ai.timeoutMs
+  );
+
+  return extractJsonObject(data.message?.content || data.response || '');
+}
+
 async function askAiSuggestion(config, questionData) {
   const provider = config.ai.provider.toLowerCase();
   const prompt = buildAiPrompt(questionData);
   return withRetries('AI suggestion', config.ai.retries, () => {
     if (provider === 'openai') return askOpenAi(config, prompt);
     if (provider === 'gemini') return askGemini(config, prompt);
+    if (provider === 'ollama') return askOllama(config, prompt);
     throw new Error(`Unsupported AI provider: ${provider}`);
   });
 }

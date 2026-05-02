@@ -7,6 +7,9 @@
     "start": "node src/main.js",
     "start:legacy": "node src/assistant.js",
     "check": "node --check src/main.js",
+    "ollama:serve": ".tools\\ollama\\ollama.exe serve",
+    "ollama:list": ".tools\\ollama\\ollama.exe list",
+    "ollama:pull": ".tools\\ollama\\ollama.exe pull qwen2.5:3b",
     "install:browsers": "playwright install chromium"
   },
   "dependencies": {
