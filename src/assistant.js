@@ -33,6 +33,30 @@ const DEFAULT_CONFIG = {
 const rl = createInterface({ input, output });
 let lastQuestion = null;
 
+const UI = {
+  disciplines: '\u0414\u0438\u0441\u0446\u0438\u043f\u043b\u0456\u043d\u0438',
+  progressStats: '\u0421\u0442\u0430\u0442\u0438\u0441\u0442\u0438\u043a\u0430 \u043f\u0440\u043e\u0445\u043e\u0434\u0436\u0435\u043d\u043d\u044f',
+  interactivePresentation: '\u0406\u043d\u0442\u0435\u0440\u0430\u043a\u0442\u0438\u0432\u043d\u0430 \u043f\u0440\u0435\u0437\u0435\u043d\u0442\u0430\u0446\u0456\u044f',
+  topicTest: '\u0422\u0435\u0441\u0442\u0443\u0432\u0430\u043d\u043d\u044f \u043f\u043e \u0442\u0435\u043c\u0456',
+  startTesting: '\u0420\u043e\u0437\u043f\u043e\u0447\u0430\u0442\u0438 \u0442\u0435\u0441\u0442\u0443\u0432\u0430\u043d\u043d\u044f',
+  beginTesting: '\u041f\u043e\u0447\u0430\u0442\u0438 \u0442\u0435\u0441\u0442\u0443\u0432\u0430\u043d\u043d\u044f',
+  start: '\u0420\u043e\u0437\u043f\u043e\u0447\u0430\u0442\u0438',
+  begin: '\u041f\u043e\u0447\u0430\u0442\u0438',
+  next: '\u041d\u0430\u0441\u0442\u0443\u043f\u043d\u0438\u0439',
+  nextNeuter: '\u041d\u0430\u0441\u0442\u0443\u043f\u043d\u0435',
+  back: '\u041f\u043e\u043f\u0435\u0440\u0435\u0434\u043d\u0456\u0439',
+  submitAnswer: '\u0412\u0456\u0434\u043f\u0440\u0430\u0432\u0438\u0442\u0438 \u0432\u0456\u0434\u043f\u043e\u0432\u0456\u0434\u044c',
+  submit: '\u0412\u0456\u0434\u043f\u0440\u0430\u0432\u0438\u0442\u0438',
+  save: '\u0417\u0431\u0435\u0440\u0435\u0433\u0442\u0438',
+  further: '\u0414\u0430\u043b\u0456',
+  presentationDone: '\u0412\u0438 \u0437\u0430\u0432\u0435\u0440\u0448\u0438\u043b\u0438 \u043f\u0435\u0440\u0435\u0433\u043b\u044f\u0434 \u043f\u0440\u0435\u0437\u0435\u043d\u0442\u0430\u0446\u0456\u0457',
+  lastSlide: '\u043e\u0441\u0442\u0430\u043d\u043d\u0456\u0439 \u0441\u043b\u0430\u0439\u0434',
+  please: '\u0431\u0443\u0434\u044c \u043b\u0430\u0441\u043a\u0430',
+  choose: '\u0432\u0438\u0431\u0435\u0440\u0456\u0442\u044c',
+  correctPrefix: '\u043f\u0440\u0430\u0432\u0438\u043b\u044c\u043d',
+  sendAnswerLower: '\u0432\u0456\u0434\u043f\u0440\u0430\u0432\u0438\u0442\u0438 \u0432\u0456\u0434\u043f\u043e\u0432\u0456\u0434\u044c'
+};
+
 async function readJson(file, fallback) {
   if (!existsSync(file)) return fallback;
   const raw = await readFile(file, 'utf8');
@@ -213,7 +237,7 @@ async function assertLoggedIn(page) {
   await page.waitForLoadState('domcontentloaded').catch(() => {});
   await page.waitForTimeout(800);
 
-  const status = await page.evaluate(() => {
+  const status = await page.evaluate(({ disciplines, progressStats }) => {
     const clean = (value) => (value || '').replace(/\s+/g, ' ').trim();
     const body = clean(document.body?.innerText || '');
     const hasPassword = !!document.querySelector('input[type="password"]');
@@ -222,13 +246,17 @@ async function assertLoggedIn(page) {
       /Дисципліни|Статистика проходження|HOLINCHENKO|ePLATO/i.test(body) &&
       /Дисципліни|Статистика проходження/i.test(body);
 
+    const hasCabinetSafe =
+      (body.includes(disciplines) || body.includes(progressStats) || /HOLINCHENKO|ePLATO/i.test(body)) &&
+      (body.includes(disciplines) || body.includes(progressStats));
+
     return {
       body,
       hasPassword,
       hasLoginInput,
-      hasCabinet
+      hasCabinet: hasCabinetSafe || hasCabinet
     };
-  });
+  }, { disciplines: UI.disciplines, progressStats: UI.progressStats });
 
   if (status.hasPassword || status.hasLoginInput || !status.hasCabinet) {
     throw new Error('Not logged in. Open the Playwright browser profile once, log in to ePlato, then run the script again.');

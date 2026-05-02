@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node src/assistant.js",
+    "start": "node src/main.js",
+    "start:legacy": "node src/assistant.js",
+    "check": "node --check src/main.js",
     "install:browsers": "playwright install chromium"
   },
   "dependencies": {

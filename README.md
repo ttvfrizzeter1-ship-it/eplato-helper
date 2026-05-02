@@ -14,6 +14,18 @@ npm.cmd start
 
 Use `npm.cmd` on Windows if PowerShell blocks `npm`.
 
+The active entrypoint is `src/main.js`. The older file is still available through:
+
+```powershell
+npm.cmd run start:legacy
+```
+
+Quick syntax check:
+
+```powershell
+npm.cmd run check
+```
+
 First-time login:
 
 1. Run the script once.
@@ -31,7 +43,9 @@ In `config.json`:
   "ai": {
     "provider": "gemini",
     "openaiModel": "gpt-5-mini",
-    "geminiModel": "gemini-2.5-flash"
+    "geminiModel": "gemini-2.5-flash",
+    "retries": 2,
+    "timeoutMs": 45000
   }
 }
 ```
@@ -41,7 +55,16 @@ In `config.json`:
 - `autoSubmit: false` leaves submit/next clicks manual.
 - `autoSubmit: true` clicks submit/next after a matched answer.
 - `ai.provider` can be `gemini` or `openai`.
+- `ai.retries` retries transient AI/API failures.
+- `ai.timeoutMs` limits one AI request.
 - `presentationMaxSlides` limits how many times guided mode can click `Next`.
+
+## Current stability notes
+
+- `npm start` uses `src/main.js`, which avoids Windows encoding issues by storing Ukrainian UI strings as Unicode escapes.
+- The script checks login automatically and exits if the saved browser profile is not logged in.
+- Fixed timeouts are kept short; most waits now continue as soon as the page is ready.
+- If navigation fails on a specific page, use menu action `6` and send the files from `data/debug`.
 
 ## AI suggestion
 

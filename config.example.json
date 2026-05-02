@@ -8,11 +8,13 @@
   "ai": {
     "provider": "openai",
     "openaiModel": "gpt-5-mini",
-    "geminiModel": "gemini-2.5-flash"
+    "geminiModel": "gemini-2.5-flash",
+    "retries": 2,
+    "timeoutMs": 45000
   },
   "slowMoMs": 0,
   "timeouts": {
     "pageMs": 30000,
-    "afterClickMs": 350
+    "afterClickMs": 250
   }
 }
