@@ -42,6 +42,7 @@ In `config.json`:
   "autoSubmit": false,
   "ai": {
     "provider": "gemini",
+    "openaiApi": "responses",
     "openaiModel": "gpt-5-mini",
     "geminiModel": "gemini-2.5-flash",
     "retries": 2,
@@ -55,6 +56,7 @@ In `config.json`:
 - `autoSubmit: false` leaves submit/next clicks manual.
 - `autoSubmit: true` clicks submit/next after a matched answer.
 - `ai.provider` can be `gemini` or `openai`.
+- `ai.openaiApi` can be `responses` or `chat`.
 - `ai.retries` retries transient AI/API failures.
 - `ai.timeoutMs` limits one AI request.
 - `presentationMaxSlides` limits how many times guided mode can click `Next`.

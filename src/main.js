@@ -44,6 +44,7 @@ const DEFAULT_CONFIG = {
   slowMoMs: 0,
   ai: {
     provider: 'openai',
+    openaiApi: 'responses',
     openaiModel: 'gpt-5-mini',
     geminiModel: 'gemini-2.5-flash',
     retries: 2,
@@ -85,7 +86,12 @@ function parseNumberList(input) {
 
 async function readJson(file, fallback) {
   if (!existsSync(file)) return fallback;
-  return JSON.parse(await readFile(file, 'utf8'));
+  try {
+    return JSON.parse(await readFile(file, 'utf8'));
+  } catch (error) {
+    console.warn(`Warning: could not parse ${file}; using fallback. ${error.message}`);
+    return fallback;
+  }
 }
 
 async function writeJson(file, data) {
@@ -113,6 +119,14 @@ async function withRetries(label, attempts, fn) {
     }
   }
   throw new Error(`${label} failed: ${lastError?.message || lastError}`);
+}
+
+async function retryAction(label, fn, attempts = 2) {
+  return withRetries(label, attempts, async () => {
+    const result = await fn();
+    if (!result) throw new Error('action returned false');
+    return result;
+  }).catch(() => false);
 }
 
 async function fetchJsonWithTimeout(url, options, timeoutMs) {
@@ -153,6 +167,27 @@ ${options}`;
 async function askOpenAi(config, prompt) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error('OPENAI_API_KEY is not set.');
+
+  if ((config.ai.openaiApi || 'responses').toLowerCase() === 'chat') {
+    const chatData = await fetchJsonWithTimeout(
+      'https://api.openai.com/v1/chat/completions',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: config.ai.openaiModel,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0
+        })
+      },
+      config.ai.timeoutMs
+    );
+
+    return extractJsonObject(chatData.choices?.[0]?.message?.content || '');
+  }
 
   const data = await fetchJsonWithTimeout(
     'https://api.openai.com/v1/responses',
@@ -256,10 +291,11 @@ async function assertLoggedIn(page) {
     const body = clean(document.body?.innerText || '');
     const hasPassword = !!document.querySelector('input[type="password"]');
     const hasLoginInput = !!document.querySelector('input[name*="login" i], input[name*="email" i], input[name*="user" i]');
+    const hasStudentUrl = location.href.includes('/eAristoStudent/');
     const hasCabinet =
       (body.includes(disciplines) || body.includes(progressStats) || /HOLINCHENKO|ePLATO/i.test(body)) &&
       (body.includes(disciplines) || body.includes(progressStats));
-    return { hasPassword, hasLoginInput, hasCabinet };
+    return { hasPassword, hasLoginInput, hasCabinet: hasCabinet || hasStudentUrl };
   }, { disciplines: UI.disciplines, progressStats: UI.progressStats });
 
   if (status.hasPassword || status.hasLoginInput || !status.hasCabinet) {
@@ -332,7 +368,7 @@ async function clickRowActionByNumber(page, number) {
     target.scrollIntoView({ block: 'center', inline: 'center' });
     target.click();
     return true;
-  }, number);
+  }, number).catch(() => false);
 }
 
 async function readVisibleNumberedRows(page) {
@@ -344,6 +380,7 @@ async function readVisibleNumberedRows(page) {
       return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0;
     };
     const rowSelector = 'tr, li, .v-list-item, .mat-row, [role="row"], [class*="row"]';
+    const seen = new Set();
     return [...document.querySelectorAll(rowSelector)]
       .filter(visible)
       .map((node) => clean(node.innerText || node.textContent))
@@ -351,8 +388,12 @@ async function readVisibleNumberedRows(page) {
         const match = text.match(/^\s*(\d{1,3})\s*[\).:-]?\s+(.+)/);
         return match ? { number: Number(match[1]), text } : null;
       })
-      .filter(Boolean);
-  });
+      .filter((item) => {
+        if (!item || seen.has(item.number)) return false;
+        seen.add(item.number);
+        return true;
+      });
+  }).catch(() => []);
 }
 
 async function clickAccordion(page, title) {
@@ -377,7 +418,42 @@ async function clickAccordion(page, title) {
     target.scrollIntoView({ block: 'center', inline: 'center' });
     target.click();
     return true;
-  }, title);
+  }, title).catch(() => false);
+}
+
+async function isPanelExpanded(page, title) {
+  return page.evaluate((title) => {
+    const clean = (value) => (value || '').replace(/\s+/g, ' ').trim();
+    const visible = (node) => {
+      const style = window.getComputedStyle(node);
+      const rect = node.getBoundingClientRect();
+      return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0;
+    };
+    const candidates = [...document.querySelectorAll('.v-expansion-panel, .mat-expansion-panel, [class*="accordion"], [class*="panel"]')]
+      .filter(visible)
+      .filter((panel) => clean(panel.innerText || panel.textContent).toLowerCase().includes(title.toLowerCase()));
+
+    return candidates.some((panel) =>
+      panel.classList.contains('v-expansion-panel--active') ||
+      panel.classList.contains('mat-expanded') ||
+      panel.getAttribute('aria-expanded') === 'true' ||
+      !!panel.querySelector('[aria-expanded="true"]')
+    );
+  }, title).catch(() => false);
+}
+
+async function expandAccordion(page, title, config) {
+  if (await isPanelExpanded(page, title)) return true;
+  const clicked = await clickAccordion(page, title);
+  if (clicked) await waitAfterClick(page, config);
+  return clicked;
+}
+
+async function isTestCompleted(page) {
+  return page.evaluate(() => {
+    const body = (document.body?.innerText || '').replace(/\s+/g, ' ');
+    return /Тест\s*пройдено|Результат|Ваш\s*бал|Зараховано|Completed|Result|Score/i.test(body);
+  }).catch(() => false);
 }
 
 async function clickStartTest(page) {
@@ -387,20 +463,19 @@ async function clickStartTest(page) {
 async function goToSubject(page, config, subjectNumber) {
   await page.goto(config.startUrl, { waitUntil: 'domcontentloaded' });
   await waitAfterClick(page, config);
-  const clicked = await clickRowActionByNumber(page, subjectNumber);
+  const clicked = await retryAction(`open subject ${subjectNumber}`, () => clickRowActionByNumber(page, subjectNumber));
   if (clicked) await waitAfterClick(page, config);
   return clicked;
 }
 
 async function openNumberedRow(page, number, config) {
-  const clicked = await clickRowActionByNumber(page, number);
+  const clicked = await retryAction(`open numbered row ${number}`, () => clickRowActionByNumber(page, number));
   if (clicked) await waitAfterClick(page, config);
   return clicked;
 }
 
 async function advancePresentation(page, config) {
-  await clickAccordion(page, UI.interactivePresentation).catch(() => false);
-  await waitAfterClick(page, config);
+  await expandAccordion(page, UI.interactivePresentation, config).catch(() => false);
 
   let clicks = 0;
   const donePatterns = [
@@ -426,8 +501,7 @@ async function advancePresentation(page, config) {
 async function scrollToTesting(page, config) {
   await page.evaluate(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'instant' }));
   await sleep(config.timeouts.afterClickMs);
-  await clickAccordion(page, UI.topicTest).catch(() => false);
-  await waitAfterClick(page, config);
+  await expandAccordion(page, UI.topicTest, config).catch(() => false);
 }
 
 async function extractQuestionFromDom(page) {
@@ -494,9 +568,13 @@ async function extractQuestionFromDom(page) {
 }
 
 async function extractQuestion(page) {
-  const fromDom = await extractQuestionFromDom(page).catch(() => ({ question: '', options: [] }));
-  let question = normalizeText(fromDom.question);
+  let question = '';
   const options = [];
+
+  for (const selector of ['.question', '.test-question', '[class*="question"]', '[class*="task"]']) {
+    question = normalizeText(await page.locator(selector).first().textContent({ timeout: 500 }).catch(() => ''));
+    if (question.length > 10) break;
+  }
 
   for (const selector of ['mat-radio-button', 'mat-checkbox', 'label', '[role="radio"]', '[role="checkbox"]']) {
     const count = await page.locator(selector).count().catch(() => 0);
@@ -509,16 +587,12 @@ async function extractQuestion(page) {
     if (options.length) break;
   }
 
+  const fromDom = await extractQuestionFromDom(page).catch(() => ({ question: '', options: [] }));
+  if (!question) question = normalizeText(fromDom.question);
+
   for (const option of fromDom.options) {
     const text = stripOptionNumber(option.text);
     if (text && !options.some((item) => item.text === text)) options.push({ ...option, text });
-  }
-
-  if (!question) {
-    for (const selector of ['.question', '.test-question', '[class*="question"]', '[class*="task"]']) {
-      question = normalizeText(await page.locator(selector).first().textContent({ timeout: 500 }).catch(() => ''));
-      if (question.length > 10) break;
-    }
   }
 
   return { question, options };
@@ -615,17 +689,31 @@ async function runGuidedBatch(page, config, observed) {
     await rl.question('Ready? ');
   }
 
+  const subjectUrl = page.url();
   const modulesToRun = moduleNumbers === 'all' ? (await readVisibleNumberedRows(page)).map((row) => row.number) : moduleNumbers;
   for (const moduleNumber of modulesToRun) {
     console.log(`\n=== Module ${moduleNumber} ===`);
+
+    if (page.url() !== subjectUrl) {
+      await page.goto(subjectUrl, { waitUntil: 'domcontentloaded' }).catch(() => {});
+      await waitAfterClick(page, config);
+    }
+
     if (!(await openNumberedRow(page, moduleNumber, config))) {
       console.log(`Could not open module ${moduleNumber}. Open it manually, then press Enter.`);
       await rl.question('Ready? ');
     }
 
+    const moduleUrl = page.url();
     const topicsToRun = requestedTopicNumbers === 'all' ? (await readVisibleNumberedRows(page)).map((row) => row.number) : requestedTopicNumbers;
     for (const topicNumber of topicsToRun) {
       console.log(`\n--- Topic ${topicNumber} ---`);
+
+      if (page.url() !== moduleUrl) {
+        await page.goto(moduleUrl, { waitUntil: 'domcontentloaded' }).catch(() => {});
+        await waitAfterClick(page, config);
+      }
+
       if (!(await openNumberedRow(page, topicNumber, config))) {
         console.log(`Could not open topic ${topicNumber}. Open it manually, then press Enter.`);
         await rl.question('Ready? ');
@@ -636,6 +724,11 @@ async function runGuidedBatch(page, config, observed) {
       console.log(`Presentation advanced: ${await advancePresentation(page, config)} click(s).`);
 
       await scrollToTesting(page, config);
+      if (await isTestCompleted(page)) {
+        console.log('Test already completed/result visible. Skipping this topic.');
+        continue;
+      }
+
       const topicTitle = (await pageTitle(page)) || `subject ${subjectNumber} module ${moduleNumber} topic ${topicNumber}`;
       const current = await readAndStoreQuestion(page, observed, topicTitle);
       if (!current.question || !current.options.length) {
@@ -651,12 +744,9 @@ async function runGuidedBatch(page, config, observed) {
       }
 
       await waitAfterClick(page, config);
-      await page.goBack({ waitUntil: 'domcontentloaded' }).catch(() => {});
+      await page.goto(moduleUrl, { waitUntil: 'domcontentloaded' }).catch(() => {});
       await waitAfterClick(page, config);
     }
-
-    await page.goBack({ waitUntil: 'domcontentloaded' }).catch(() => {});
-    await waitAfterClick(page, config);
   }
 }
 

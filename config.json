@@ -7,6 +7,7 @@
   "presentationMaxSlides": 250,
   "ai": {
     "provider": "openai",
+    "openaiApi": "responses",
     "openaiModel": "gpt-5-mini",
     "geminiModel": "gemini-2.5-flash",
     "retries": 2,
